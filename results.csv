@@ -1,0 +1,8 @@
+label, instance, validation, score, n_vehicles, avg_travel_time,std_travel_time, avg_tw_violations, n_scenarios, runtime_sec
+CW_λ0.85,istanbul_small_100,PASSED,23805.86,20,3749.36,128.37,1.13,100,0.0
+SA_50k,istanbul_small_100,PASSED,21750.16,18,3649.16,86.03,2.02,100,4.5
+TS_1000,istanbul_small_100,PASSED,22664.91,19,3586.91,116.92,1.56,100,1.6
+MA_SA_g3,istanbul_small_100,PASSED,22670.54,19,3596.04,86.8,1.49,100,11.4
+MA_TS_g3,istanbul_small_100,PASSED,21697.2,18,3588.7,110.87,2.17,100,2.9
+ACO_a5_i5,istanbul_small_100,PASSED,23745.61,19,4658.61,116.42,1.74,100,1.8
+Best+Elim,istanbul_small_100,PASSED,21697.2,18,3588.7,110.87,2.17,100,0.0
