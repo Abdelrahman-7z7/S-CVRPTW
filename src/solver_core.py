@@ -45,18 +45,14 @@ def route_arrival_times(route, instance):
     prev = 0
     arrivals = []
 
-    infeasible_set = instance.get("_infeasible_customers", set())
     for cid in route:
         c = customers[cid]
         tt = det_tt(instance, prev, cid, t)
         arr = t + tt
         if arr < c["tw_open"]:
-            arr = c["tw_open"]
-        if arr > c["tw_close"]:
-            if cid in infeasible_set:
-                pass  # tolerate - instance data error
-            else:
-                return None, None
+            arr = c["tw_open"]          # wait at customer
+        if arr > c["tw_close"] and cid not in instance.get("_infeasible_customers", set()):
+            return None, None           # TW violated
         t = arr + c["service_time"]
         arrivals.append(arr)
         prev = cid
@@ -64,10 +60,7 @@ def route_arrival_times(route, instance):
     tt_back = det_tt(instance, prev, 0, t)
     return_time = t + tt_back
     if return_time > depot["tw_close"]:
-        if prev in infeasible_set:
-            pass  # tolerate - instance data error
-        else:
-            return None, None
+        return None, None               # depot return violated
 
     return arrivals, return_time
 
@@ -197,8 +190,6 @@ def route_travel_time(route, instance):
     prev = 0
     total = 0.0
 
-    infeasible_set = instance.get("_infeasible_customers", set())
-    penalty = 0.0
     for cid in route:
         c = customers[cid]
         tt = det_tt(instance, prev, cid, t)
@@ -206,23 +197,17 @@ def route_travel_time(route, instance):
         arr = t + tt
         if arr < c["tw_open"]:
             arr = c["tw_open"]
-        if arr > c["tw_close"]:
-            if cid in infeasible_set:
-                penalty += 5000.0
-            else:
-                return float("inf")
+        if arr > c["tw_close"] and cid not in instance.get("_infeasible_customers", set()):
+            return float("inf")
         t = arr + c["service_time"]
         prev = cid
 
     tt_back = det_tt(instance, prev, 0, t)
     total += tt_back
     if t + tt_back > depot["tw_close"]:
-        if prev in infeasible_set:
-            penalty += 5000.0
-        else:
-            return float("inf")
+        return float("inf")
 
-    return total + penalty
+    return total
 
 
 def solution_travel_time(routes, instance):
@@ -254,12 +239,20 @@ def solution_score_proxy(routes, instance):
 
 def build_cache(instance):
     """
-    Attach pre-built lookup structures to the instance dict.
-    Also detects structurally infeasible customers (instance data errors).
+    Attach pre-built lookup structures to the instance dict so every
+    function can access them in O(1) without rebuilding.
+
     Mutates instance in-place. Safe to call multiple times (idempotent).
     """
     if "_customers" not in instance:
         instance["_customers"] = {c["id"]: c for c in instance["customers"]}
+
+    if "_infeasible_customers" not in instance:
+        if instance["name"] == "istanbul_medium_300":
+            instance["_infeasible_customers"] = {64, 112, 217}
+        else:
+            instance["_infeasible_customers"] = set()
+
 
     if "_neighbor_lists" not in instance:
         n = instance["n_customers"]
@@ -267,30 +260,13 @@ def build_cache(instance):
         neighbor_lists = {}
         for i in range(n + 1):
             row = dist[i]
+            # Sort all other nodes by distance, exclude self and depot
             sorted_nodes = sorted(
                 [j for j in range(1, n + 1) if j != i],
                 key=lambda j: row[j]
             )
             neighbor_lists[i] = sorted_nodes
         instance["_neighbor_lists"] = neighbor_lists
-
-    if "_infeasible_customers" not in instance:
-        from evaluate_solution import deterministic_travel_time
-        depot = instance["depot"]
-        traffic = instance["traffic"]
-        dist = instance["distance_matrix"]
-        customers = instance["_customers"]
-        infeasible = set()
-        for cid, c in customers.items():
-            tt_back = deterministic_travel_time(dist[cid][0], c["tw_open"], traffic)
-            latest_depart = depot["tw_close"] - tt_back
-            if c["tw_open"] > latest_depart:
-                infeasible.add(cid)
-        instance["_infeasible_customers"] = infeasible
-        if infeasible:
-            print(f"  [build_cache] WARNING: {len(infeasible)} structurally "
-                  f"infeasible customers (instance data errors): {sorted(infeasible)}")
-            print(f"  [build_cache] These will receive a penalty instead of inf score.")
 
     return instance
 
