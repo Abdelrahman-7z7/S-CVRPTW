@@ -192,7 +192,7 @@ def tournament_select(population, scores, k=3, rng=None):
 def apply_local_search(routes, instance, method="sa",
                         iterations=500, seed=42):
     """
-    Apply SA or TS local search to a single individual.
+    Apply SA, TS, or LNS local search to a single individual.
     Returns improved routes.
     """
     if method == "sa":
@@ -212,6 +212,27 @@ def apply_local_search(routes, instance, method="sa",
             instance,
             initial_routes=routes,
             max_iterations=ts_iters,
+            verbose=False,
+            seed=seed
+        )
+    elif method == "lns":
+        from lns_solver import lns_solve
+        # LNS iter time scales with n_customers (repair is O(N)).
+        # Cap to keep each individual under ~15s regardless of instance size.
+        #   100 customers → up to 200 iters (~8s each)
+        #   300 customers → up to 25 iters  (~14s each)
+        #   500 customers → up to 15 iters  (~15s each)
+        n = instance["n_customers"]
+        if n <= 100:
+            lns_iters = max(10, iterations // 10)
+        elif n <= 300:
+            lns_iters = max(5, min(25, iterations // 80))
+        else:
+            lns_iters = max(5, min(12, iterations // 200))
+        return lns_solve(
+            instance,
+            initial_routes=routes,
+            n_iterations=lns_iters,
             verbose=False,
             seed=seed
         )
@@ -246,16 +267,13 @@ def ma_solve(instance,
              pop_size=20,
              n_generations=200,
              local_search="sa",
-            #  ls_iterations=500, # for the small data
-             ls_iterations=5000, # for the large data
+             ls_iterations=500,
              crossover_prob=0.85,
              mutation_rate=0.15,
              tournament_k=3,
              elitism=2,
-            #  diversity_threshold=0.005, # for the small data
-            diversity_threshold=0.002, # for the large data
-            #  inject_count=3, # for the small data
-             inject_count=6, # for the large data
+             diversity_threshold=0.005,
+             inject_count=3,
              lambda_range=(0.8, 1.2),
              seed=42,
              verbose=True,
