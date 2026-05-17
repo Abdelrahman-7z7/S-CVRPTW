@@ -249,7 +249,8 @@ Score = N_vehicles × 1000 + Avg_travel_time + 50 × Avg_TW_violations
 
 | Algorithm | Vehicles | Avg TT | Violations | Score | vs Baseline |
 |---|---|---|---|---|---|
-| **SA** | **94** | **17,476** | **10.85** | **112,018** | **−6.2%** |
+| **MA_LNS** | **93** | **18,044** | **11.45** | **111,617** | **−6.5%** |
+| SA | 94 | 17,476 | 10.85 | 112,018 | −6.2% |
 | LNS | 93 | 18,459 | 13.24 | 112,121 | −6.1% |
 | MA_SA | 94 | 17,643 | 9.78 | 112,132 | −6.1% |
 | MA_TS | 95 | 17,073 | 9.14 | 112,530 | −5.8% |
@@ -257,7 +258,7 @@ Score = N_vehicles × 1000 + Avg_travel_time + 50 × Avg_TW_violations
 | ACO | 95 | 20,678 | 12.82 | 116,319 | −2.6% |
 | CW | 98 | 17,862 | 10.50 | 116,387 | −2.5% |
 
-> **Key findings**: MA_LNS consistently produces the best results on small/medium instances. On the full 500-customer instance, SA and LNS compete closely. The hybrid MA approach (population diversity + local search depth) is the primary driver of vehicle reduction.
+> **Key findings**: **MA_LNS is the best algorithm across all three instance sizes**, achieving the lowest score on small (21,520), medium (63,192), and full (111,617) instances. The combination of population-based diversity (GA crossover + diversity injection) with powerful destroy-and-repair local search (ALNS) is the primary driver — it consistently reduces vehicle count while maintaining competitive travel times. On the full 500-customer instance, MA_LNS reduced vehicles to 93 (from baseline 98) and improved the score by 6.5%, running in ~7.9 hours.
 
 ---
 
@@ -407,10 +408,10 @@ S-CVRPTW/
 │       ├── istanbul_full_500.json         # 500 customers (~4.0 MB, competition instance)
 │       └── baseline_istanbul_small_100.json  # Course-provided baseline solution
 │
-├── solutions/                             # Output directory (25 solution JSONs)
+├── solutions/                             # Output directory (27 solution JSONs)
 │   ├── solution_istanbul_small_100_*.json      # 9 solutions (8 algorithms + Best_Eliminator)
 │   ├── solution_istanbul_medium_300_*.json     # 9 solutions
-│   └── solution_istanbul_full_500_*.json       # 7 solutions (full run still in progress)
+│   └── solution_istanbul_full_500_*.json       # 9 solutions
 │
 ├── plot_istanbul_small_100.png            # Static route visualization (100 customers)
 ├── plot_istanbul_medium_300.png           # Static route visualization (300 customers)
