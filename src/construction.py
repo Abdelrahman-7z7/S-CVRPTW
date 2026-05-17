@@ -103,13 +103,38 @@ def clarke_wright(instance, lambda_param=1.0, verbose=False):
     """
     build_cache(instance)
     n = instance["n_customers"]
+    depot = instance["depot"]
+    dist = instance["distance_matrix"]
+    traffic = instance["traffic"]
+
+    # ------------------------------------------------------------------
+    # Pre-check: identify customers that are unreachable as the FIRST
+    # stop on a route (depot → customer violates their time window).
+    # These cannot form valid singleton routes, so we must ensure the
+    # savings merging phase always combines them with a predecessor.
+    # We flag them here; if they remain as singletons after the merge
+    # phase we will forcibly insert them into the best feasible route.
+    # ------------------------------------------------------------------
+    from evaluate_solution import deterministic_travel_time as _dtt
+    unreachable_as_first = set()
+    for cid in range(1, n + 1):
+        c = instance["_customers"][cid]
+        d = dist[0][cid]
+        tt = _dtt(d, depot["tw_open"], traffic)
+        arr = depot["tw_open"] + tt
+        if arr < c["tw_open"]:
+            arr = c["tw_open"]
+        if arr > c["tw_close"]:
+            unreachable_as_first.add(cid)
+
+    if unreachable_as_first and verbose:
+        print(f"  CW: {len(unreachable_as_first)} customers unreachable "
+              f"as first stop: {sorted(unreachable_as_first)}")
 
     # Step 1: initialise one singleton route per customer
     # route_of[cid] = index into routes list
     routes = [[cid] for cid in range(1, n + 1)]
     route_of = {cid: cid - 1 for cid in range(1, n + 1)}
-    # route_end[r_idx] = last customer in route r_idx
-    # route_start[r_idx] = first customer in route r_idx
 
     # We track route membership via route_of, and identify
     # endpoints directly from routes[r_idx][0] and routes[r_idx][-1]
@@ -156,10 +181,57 @@ def clarke_wright(instance, lambda_param=1.0, verbose=False):
     # Step 4: collect non-None routes
     result = [r for r in routes if r is not None]
 
+    # ------------------------------------------------------------------
+    # Step 5: fix any customers that are still isolated on invalid
+    # singleton routes (unreachable-as-first-stop).
+    # Force-insert them into every possible position in every existing
+    # route using the full feasibility simulator.
+    # ------------------------------------------------------------------
+    still_invalid = [
+        r[0] for r in result
+        if len(r) == 1 and r[0] in unreachable_as_first
+    ]
+
+    if still_invalid:
+        if verbose:
+            print(f"  CW: force-inserting {len(still_invalid)} "
+                  f"unreachable singletons: {still_invalid}")
+
+        # Remove their singleton routes from result
+        result = [r for r in result
+                  if not (len(r) == 1 and r[0] in unreachable_as_first)]
+
+        from solver_core import best_insertion
+        for cid in still_invalid:
+            best_r = None
+            best_pos = None
+            best_delta = float("inf")
+
+            # Try EVERY position (including 0) in EVERY route
+            for r_idx, route in enumerate(result):
+                pos, delta = best_insertion(route, cid, instance)
+                if pos is not None and delta < best_delta:
+                    best_delta = delta
+                    best_r = r_idx
+                    best_pos = pos
+
+            if best_r is not None:
+                result[best_r].insert(best_pos, cid)
+                if verbose:
+                    print(f"    Inserted cust {cid} at pos {best_pos} "
+                          f"in route {best_r} (delta={best_delta:.1f})")
+            else:
+                # Truly cannot fit anywhere — open singleton (will fail
+                # validation, but signals instance issue to the user)
+                result.append([cid])
+                if verbose:
+                    print(f"    WARNING: cust {cid} is infeasible in this "
+                          f"instance — no valid position exists in any route")
+
     if verbose:
         print(f"  Clarke-Wright (λ={lambda_param:.2f}): "
               f"{n} customers → {len(result)} routes "
-              f"({merges} merges, savings threshold: {saving:.2f})")
+              f"({merges} merges)")
 
     return result
 

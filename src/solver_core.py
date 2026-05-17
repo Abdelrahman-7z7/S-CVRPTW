@@ -45,14 +45,18 @@ def route_arrival_times(route, instance):
     prev = 0
     arrivals = []
 
+    infeasible_set = instance.get("_infeasible_customers", set())
     for cid in route:
         c = customers[cid]
         tt = det_tt(instance, prev, cid, t)
         arr = t + tt
         if arr < c["tw_open"]:
-            arr = c["tw_open"]          # wait at customer
-        if arr > c["tw_close"] and cid not in instance.get("_infeasible_customers", set()):
-            return None, None           # TW violated
+            arr = c["tw_open"]
+        if arr > c["tw_close"]:
+            if cid in infeasible_set:
+                pass
+            else:
+                return None, None
         t = arr + c["service_time"]
         arrivals.append(arr)
         prev = cid
@@ -60,7 +64,10 @@ def route_arrival_times(route, instance):
     tt_back = det_tt(instance, prev, 0, t)
     return_time = t + tt_back
     if return_time > depot["tw_close"]:
-        return None, None               # depot return violated
+        if prev in infeasible_set:
+            pass
+        else:
+            return None, None
 
     return arrivals, return_time
 
@@ -190,6 +197,8 @@ def route_travel_time(route, instance):
     prev = 0
     total = 0.0
 
+    infeasible_set = instance.get("_infeasible_customers", set())
+    penalty = 0.0
     for cid in route:
         c = customers[cid]
         tt = det_tt(instance, prev, cid, t)
@@ -197,17 +206,23 @@ def route_travel_time(route, instance):
         arr = t + tt
         if arr < c["tw_open"]:
             arr = c["tw_open"]
-        if arr > c["tw_close"] and cid not in instance.get("_infeasible_customers", set()):
-            return float("inf")
+        if arr > c["tw_close"]:
+            if cid in infeasible_set:
+                penalty += 5000.0
+            else:
+                return float("inf")
         t = arr + c["service_time"]
         prev = cid
 
     tt_back = det_tt(instance, prev, 0, t)
     total += tt_back
     if t + tt_back > depot["tw_close"]:
-        return float("inf")
+        if prev in infeasible_set:
+            penalty += 5000.0
+        else:
+            return float("inf")
 
-    return total
+    return total + penalty
 
 
 def solution_travel_time(routes, instance):
@@ -248,10 +263,30 @@ def build_cache(instance):
         instance["_customers"] = {c["id"]: c for c in instance["customers"]}
 
     if "_infeasible_customers" not in instance:
-        if instance["name"] == "istanbul_medium_300":
-            instance["_infeasible_customers"] = {64, 112, 217}
-        else:
-            instance["_infeasible_customers"] = set()
+        from evaluate_solution import deterministic_travel_time
+        depot = instance["depot"]
+        traffic = instance["traffic"]
+        dist = instance["distance_matrix"]
+        customers = instance["_customers"]
+        infeasible = set()
+        for cid, c in customers.items():
+            # Type 1: window opens after latest possible departure to reach depot
+            tt_back = deterministic_travel_time(dist[cid][0], c["tw_open"], traffic)
+            if c["tw_open"] > depot["tw_close"] - tt_back:
+                infeasible.add(cid)
+                continue
+            # Type 2: unreachable from depot even as first stop
+            tt_to = deterministic_travel_time(dist[0][cid], depot["tw_open"], traffic)
+            arr = depot["tw_open"] + tt_to
+            if arr < c["tw_open"]:
+                arr = c["tw_open"]
+            if arr > c["tw_close"]:
+                infeasible.add(cid)
+        instance["_infeasible_customers"] = infeasible
+        if infeasible:
+            print(f"  [build_cache] WARNING: {len(infeasible)} structurally "
+                  f"infeasible customers (instance data errors): {sorted(infeasible)}")
+            print(f"  [build_cache] These will receive a penalty instead of inf score.")
 
 
     if "_neighbor_lists" not in instance:
